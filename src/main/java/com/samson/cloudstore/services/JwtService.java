@@ -6,8 +6,8 @@ import com.samson.cloudstore.security.JWTKeyProvider;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.Jwts;
+import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -36,9 +36,16 @@ public class JwtService {
 
         Key key = keyProvider.getKeysByKeyID().get(keyProvider.getCurrentKeyId());
 
-        return Jwts.builder().subject(userId.toString()).issuer(keyProvider.getIssuer())
-                .issuedAt(iat).expiration(exp).claim("username", username)
-                .claim("role", role).signWith(key).compact();
+        return Jwts.builder()
+                .header().add("kid", keyProvider.getCurrentKeyId()).and()
+                .subject(userId.toString())
+                .issuer(keyProvider.getIssuer())
+                .issuedAt(iat)
+                .expiration(exp)
+                .claim("username", username)
+                .claim("role", role)
+                .signWith(key)
+                .compact();
     }
 
     public String generateRefreshToken(@NonNull UUID userId) {
@@ -50,12 +57,21 @@ public class JwtService {
         String jwtId = UUID.randomUUID().toString();
         Key key = keyProvider.getKeysByKeyID().get(keyProvider.getCurrentKeyId());
 
-        String token = Jwts.builder().subject(userId.toString()).issuer(keyProvider.getIssuer()).id(jwtId)
-                .issuedAt(iat).expiration(exp).claim("typ", "refresh").signWith(key).compact();
+        String token = Jwts.builder()
+                .header().add("kid", keyProvider.getCurrentKeyId()).and()
+                .subject(userId.toString())
+                .issuer(keyProvider.getIssuer())
+                .id(jwtId)
+                .issuedAt(iat).expiration(exp)
+                .claim("typ", "refresh")
+                .signWith(key)
+                .compact();
 
         refreshTokenRepository.save(
-                RefreshToken.builder().userId(userId)
-                        .jwtId(jwtId).expiresAt(OffsetDateTime.ofInstant(exp.toInstant(), now.getOffset()))
+                RefreshToken.builder()
+                        .userId(userId)
+                        .jwtId(jwtId)
+                        .expiresAt(OffsetDateTime.ofInstant(exp.toInstant(), now.getOffset()))
                         .revoked(false).build()
         );
 
@@ -68,15 +84,18 @@ public class JwtService {
 
     public Jws<Claims> parseAndValidate(String jwt) {
         return Jwts.parser().keyLocator(header -> {
-            // String kid = header.get("kid", String.class);
+            Object kidObj = header.get("kid");
+            String keyId = (kidObj != null && !kidObj.toString().isBlank())
+                    ? kidObj.toString()
+                    : keyProvider.getCurrentKeyId(); // fallback
 
-            String keyId = header.get("kid").toString();
             Key key = keyProvider.getKeysByKeyID().get(keyId);
-
             if (key == null) throw new SecurityException("Unknown Key ID: " + keyId);
 
             return key;
-        }).build().parseSignedClaims(jwt);
+        })
+        .build()
+        .parseSignedClaims(jwt);
     }
 
     public Boolean isRefreshTokenExpired(String jwtId) {

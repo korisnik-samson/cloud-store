@@ -1,0 +1,14 @@
+package com.samson.cloudstore.config;
+
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@Getter
+@Setter
+@ConfigurationProperties(prefix = "app.minio")
+public class MinIOProperties {
+    private String endpoint;
+    private String accessKey;
+    private String secretKey;
+}

@@ -3,8 +3,10 @@ package com.samson.cloudstore.models;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 @Entity
 @Data
@@ -16,7 +18,7 @@ import java.time.OffsetDateTime;
 public class FileMetaData {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private String id;
+    private UUID id;
 
     @Column(name = "file_name", nullable = false)
     private String fileName;
@@ -25,6 +27,7 @@ public class FileMetaData {
     private String contentType;
 
     private Long size;
+
     private String s3ObjectName;
 
     @ManyToOne
@@ -32,6 +35,12 @@ public class FileMetaData {
 
     @Column(name = "is_folder")
     private boolean isFolder;
+
+    @Column(name = "is_trashed", nullable = false)
+    private boolean isTrashed = false;
+
+    @Column(name = "trashed_at")
+    private OffsetDateTime trashed_at;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id", nullable = false)
@@ -41,7 +50,7 @@ public class FileMetaData {
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "TIMESTAMP")
     private OffsetDateTime created_at;
 
-    @CreationTimestamp
+    @UpdateTimestamp
     @Column(name = "updated_at", nullable = false, columnDefinition = "TIMESTAMP")
     private OffsetDateTime updated_at;
 }

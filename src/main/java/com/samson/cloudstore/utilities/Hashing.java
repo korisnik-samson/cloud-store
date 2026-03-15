@@ -1,4 +1,4 @@
-package com.samson.cloudstore.util;
+package com.samson.cloudstore.utilities;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

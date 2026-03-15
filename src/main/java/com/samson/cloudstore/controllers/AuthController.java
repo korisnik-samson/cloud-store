@@ -37,8 +37,8 @@ public class AuthController {
         if (!passwordEncoder.matches(requestBody.password(), user.getPassword()))
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
 
-        String accessToken = jwtService.generateAccessToken(user.getUser_id(), user.getUsername(), user.getUserRole().name());
-        String refreshToken = jwtService.generateRefreshToken(user.getUser_id());
+        String accessToken = jwtService.generateAccessToken(user.getUserId(), user.getUsername(), user.getUserRole().name());
+        String refreshToken = jwtService.generateRefreshToken(user.getUserId());
 
         return Map.of("access_token", accessToken, "refresh_token", refreshToken, "token_type", "Bearer");
     }
@@ -64,8 +64,8 @@ public class AuthController {
 
         // ROTATE: revoke old refresh token and create new one
         jwtService.revokeRefreshToken(claims.getId());
-        String newAccessToken = jwtService.generateAccessToken(user.getUser_id(), user.getUsername(), user.getUserRole().name());
-        String newRefreshToken = jwtService.generateRefreshToken(user.getUser_id());
+        String newAccessToken = jwtService.generateAccessToken(user.getUserId(), user.getUsername(), user.getUserRole().name());
+        String newRefreshToken = jwtService.generateRefreshToken(user.getUserId());
 
         return Map.of("access_token", newAccessToken, "refresh_token", newRefreshToken, "token_type", "Bearer");
     }

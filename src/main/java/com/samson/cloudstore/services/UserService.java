@@ -29,20 +29,22 @@ public class UserService {
                 () -> new ResponseStatusException(HttpStatus.NOT_FOUND)
         );
 
-        return new UserResponse(u.getUser_id().toString(), u.getUsername(), u.getEmail(), u.getUserRole().name());
+        return new UserResponse(u.getUserId().toString(), u.getUsername(), u.getEmail(), u.getUserRole().name());
     }
 
     @Transactional(readOnly = true)
     public Iterable<UserResponse> getAllUsers() {
         return repository.findAll().stream().map(
-                u -> new UserResponse(
-                        u.getUser_id().toString(), u.getUsername(), u.getEmail(), u.getUserRole().name()
+                users -> new UserResponse(
+                        users.getUserId().toString(), users.getUsername(),
+                        users.getEmail(), users.getUserRole().name()
                 )
         ).toList();
     }
 
     @Transactional
     public UserResponse create(@NotNull CreateUserRequest request) {
+        // perform any conflict checks
         if (repository.existsByEmail(request.email())) throw new ResponseStatusException(HttpStatus.CONFLICT, "email already exists");
 
         if (repository.existsByUsername(request.username())) throw new ResponseStatusException(HttpStatus.CONFLICT, "username already exists");
@@ -51,14 +53,19 @@ public class UserService {
 
         if (request.userRole() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "user role cannot be null");
 
-        Users user = Users.builder()
+        // create new user object
+        Users newUser = Users.builder()
                 .username(request.username())
-                .email(request.email()).userRole(request.userRole())
+                .email(request.email())
+                .userRole(request.userRole())
                 .password(encoder.encode(request.password()))
                 .build();
 
-        user = repository.save(user);
+        newUser = repository.save(newUser);
 
-        return new UserResponse(user.getUser_id().toString(), user.getUsername(), user.getEmail(), user.getUserRole().name());
+        return new UserResponse(
+                newUser.getUserId().toString(), newUser.getUsername(),
+                newUser.getEmail(), newUser.getUserRole().name()
+        );
     }
 }

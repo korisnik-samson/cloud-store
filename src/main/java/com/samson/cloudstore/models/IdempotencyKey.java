@@ -1,6 +1,6 @@
 package com.samson.cloudstore.models;
 
-import com.samson.cloudstore.util.IdempotencyStatus;
+import com.samson.cloudstore.utilities.IdempotencyStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;

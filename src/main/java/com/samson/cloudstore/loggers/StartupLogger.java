@@ -12,11 +12,10 @@ import org.springframework.stereotype.Component;
 @AllArgsConstructor
 public class StartupLogger {
     private final JWTKeyProvider props;
-    private final Environment env;
+    private final Environment environment;
 
     @PostConstruct
     public void logStartupInfo() {
-        log.info("Active JWT kid={}, DB user={}",
-                props.getCurrentKeyId(), env.getProperty("spring.datasource.username"));
+        log.info("Active JWT kid={}, DB user={}", props.getCurrentKeyId(), environment.getProperty("spring.datasource.username"));
     }
 }

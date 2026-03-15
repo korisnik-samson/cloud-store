@@ -31,8 +31,10 @@ public class StorageService {
 
     public void uploadFile(@NonNull MultipartFile file, UUID parentFolderId) throws Exception {
         String userEmail = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
-        Users user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Users user = userRepository.findByEmail(userEmail).orElseThrow(
+                () -> new RuntimeException("User not found")
+        );
 
         String objectName = UUID.randomUUID() + "-" + file.getOriginalFilename();
 
@@ -53,6 +55,9 @@ public class StorageService {
         fileMetaData.setS3ObjectName(objectName);
         fileMetaData.setSize(file.getSize());
         fileMetaData.setOwner(user);
+        fileMetaData.setContentType(file.getContentType() != null ? file.getContentType() : "application/octet-stream");
+        fileMetaData.setFileName(file.getOriginalFilename());
+        fileMetaData.setFolder(false); // if field naming is boolean accessor-compatible
 
         // TODO: Set parent folder logic here
 

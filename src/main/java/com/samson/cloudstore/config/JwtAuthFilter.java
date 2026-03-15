@@ -3,6 +3,7 @@ package com.samson.cloudstore.config;
 import com.samson.cloudstore.services.JwtService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,25 +35,38 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             if (authentication != null && authentication.startsWith("Bearer ")) {
                 String token = authentication.substring(7);
-                Jws<Claims> claimsJws = jwtService.parseAndValidate(token);
 
-                Claims claims = claimsJws.getPayload();
-                String subject = claims.getSubject();
-                String role = Optional.ofNullable(claims.get("role")).orElse("USER").toString();
-                String username = claims.get("username", String.class);
+                try {
+                    Jws<Claims> claimsJws = jwtService.parseAndValidate(token);
 
-                MDC.put("userId", subject);
-                MDC.put("role", role);
-                MDC.put("username", username);
+                    Claims claims = claimsJws.getPayload();
+                    String subject = claims.getSubject();
+                    String role = Optional.ofNullable(claims.get("role")).orElse("USER").toString();
+                    String username = claims.get("username", String.class);
 
-                var authenticationToken = new AbstractAuthenticationToken(
-                        List.of(new SimpleGrantedAuthority("ROLE_" + role))) {
-                    @Override public Object getCredentials() { return token; }
-                    @Override public Object getPrincipal() { return subject; }
-                };
+                    MDC.put("userId", subject);
+                    MDC.put("role", role);
+                    MDC.put("username", username);
 
-                authenticationToken.setAuthenticated(true);
-                SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+                    var authenticationToken = new AbstractAuthenticationToken(
+                            List.of(new SimpleGrantedAuthority("ROLE_" + role))) {
+                        @Override
+                        public Object getCredentials() {
+                            return token;
+                        }
+
+                        @Override
+                        public Object getPrincipal() {
+                            return subject;
+                        }
+                    };
+
+                    authenticationToken.setAuthenticated(true);
+                    SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+
+                } catch (JwtException | IllegalArgumentException | SecurityException exception) {
+                    SecurityContextHolder.clearContext();
+                }
             }
 
             filterChain.doFilter(request, response);

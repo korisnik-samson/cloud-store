@@ -1,4 +1,4 @@
-package com.samson.cloudstore.util;
+package com.samson.cloudstore.utilities;
 
 public enum UserRole {
     ADMIN, USER
