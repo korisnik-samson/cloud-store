@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -34,9 +35,16 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(@NonNull HttpSecurity httpSecurity) {
         httpSecurity.csrf(AbstractHttpConfigurer::disable)
+            .cors(Customizer.withDefaults())
             .authorizeHttpRequests(
-                    auth -> auth
-                            .requestMatchers("/actuator/**", "/healthz", "/auth/login", "/api/users/create", "/auth/refresh", "/public/**").permitAll()
+                auth -> auth
+                    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                    .requestMatchers("/actuator/**", "/healthz").permitAll()
+                    .requestMatchers("/auth/login", "/auth/refresh").permitAll()
+                    // user registration (if public)
+                    .requestMatchers("/api/users/create").permitAll()
+                    // public share resolve/download endpoints
+                    .requestMatchers("/api/v1/shares/public/**", "/api/v1/shares/resolve/**", "/public/**").permitAll()
                     .anyRequest().authenticated()
             )
             .sessionManagement(AbstractHttpConfigurer::disable)
@@ -56,11 +64,13 @@ public class SecurityConfig {
                 "http://localhost:3000",
 
                 // TODO: replace with actual frontend URL in production
-                "https://app.yourdomain.com"
+                "https://app.deployed.com"
         ));
 
         corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE" /*"OPTIONS"*/));
         corsConfig.setAllowedHeaders(List.of("*"));
+        corsConfig.setExposedHeaders(List.of("Content-Disposition"));
+
         corsConfig.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

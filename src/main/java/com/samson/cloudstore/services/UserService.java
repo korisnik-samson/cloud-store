@@ -68,4 +68,9 @@ public class UserService {
                 newUser.getEmail(), newUser.getUserRole().name()
         );
     }
+
+    public UUID getAuthenticatedUserId() {
+        // TODO: Implement this
+        return UUID.randomUUID();
+    }
 }
