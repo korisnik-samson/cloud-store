@@ -13,7 +13,6 @@ public class ShareDtos {
 
     public record CreateShareRequest(
             @NotNull UUID nodeId,
-            LocalDateTime createdAt,
             LocalDateTime expiredAt,
             Integer expiresHours,
             String password,

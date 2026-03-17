@@ -23,7 +23,7 @@ public class ShareLink {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "node_id", nullable = false)
-    private FileMetaData node;
+    private StorageNode node;
 
     @Column(nullable = false, unique = true, length = 128)
     private String token;
@@ -45,5 +45,5 @@ public class ShareLink {
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "TIMESTAMP")
-    private OffsetDateTime created_at;
+    private OffsetDateTime createdAt;
 }

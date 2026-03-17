@@ -1,100 +1,132 @@
 package com.samson.cloudstore.services;
 
-import com.samson.cloudstore.dto.ShareDtos;
-import com.samson.cloudstore.models.FileMetaData;
 import com.samson.cloudstore.models.ShareLink;
-import com.samson.cloudstore.models.Users;
-import com.samson.cloudstore.repositories.FileMetaDataRepository;
+import com.samson.cloudstore.models.StorageNode;
 import com.samson.cloudstore.repositories.ShareLinkRepository;
+import com.samson.cloudstore.repositories.StorageNodeRepository;
+import com.samson.cloudstore.utilities.Hashing;
+import com.samson.cloudstore.utilities.NodeType;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
-import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class ShareService {
 
-    private final ShareLinkRepository shareRepo;
-    private final FileMetaDataRepository fileRepo;
-    private final PasswordEncoder passwordEncoder;
-    private final ObjectStorageService objectStorage;
+    private static final SecureRandom RNG = new SecureRandom();
 
-    @Transactional
-    public ShareDtos.CreateShareResponse createShare(Users user, ShareDtos.@NonNull CreateShareRequest req) {
-        FileMetaData node = fileRepo.findOwnedActive(req.nodeId(), user)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found"));
+    private final ShareLinkRepository shareLinkRepository;
+    private final StorageNodeRepository storageNodeRepository;
+    private final ObjectStorageService objectStorageService;
+    private final Hashing hashing = new Hashing();
 
-        if (node.isFolder())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Folders cannot be shared yet");
+    public ShareLink createShare(UUID ownerId, UUID nodeId, OffsetDateTime expiresAt, Integer maxDownloads, String password) {
 
-        String token = randomTokenUrlSafe();
+        StorageNode node = storageNodeRepository.findByIdAndOwnerId(nodeId, ownerId)
+                .orElseThrow(() -> new IllegalArgumentException("Node not found"));
 
-        ShareLink link = ShareLink.builder()
+        if (node.getType() != NodeType.FILE) throw new IllegalArgumentException("Only FILE nodes can be shared");
+
+        if (node.isTrashed()) throw new IllegalArgumentException("Cannot share trashed nodes");
+
+        String token = generateToken();
+        String passwordHash = (password == null || password.isBlank()) ? null : hashing.hashPassword(password);
+
+        ShareLink shareLink = ShareLink.builder()
                 .node(node)
                 .token(token)
-                .passwordHash((req.password() == null || req.password().isBlank()) ? null : passwordEncoder.encode(req.password()))
-                .expiresAt(req.expiresHours() == null ? null : OffsetDateTime.now().plusHours(req.expiresHours()))
-                .maxDownloads(req.maxDownloads())
-                .downloadCount(0)
+                .createdAt(OffsetDateTime.now())
+                .expiresAt(expiresAt)
                 .active(true)
+                .maxDownloads(maxDownloads)
+                .downloadCount(0)
+                .passwordHash(passwordHash)
                 .build();
 
-        shareRepo.save(link);
+        return shareLinkRepository.save(shareLink);
+    }
 
-        return new ShareDtos.CreateShareResponse(token, "/share/" + token);
+    public ShareLink requireValid(String token) {
+        ShareLink link = shareLinkRepository.findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid share token"));
+
+        if (!link.isActive()) throw new IllegalArgumentException("Share link inactive");
+
+        if (link.getExpiresAt() != null && link.getExpiresAt().isBefore(OffsetDateTime.now()))
+            throw new IllegalArgumentException("Share link expired");
+
+        if (link.getMaxDownloads() != null && link.getDownloadCount() >= link.getMaxDownloads())
+            throw new IllegalArgumentException("Share link download limit reached");
+
+        return link;
+    }
+
+    public boolean isPasswordRequired(String token) {
+        ShareLink link = shareLinkRepository.findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid share token"));
+
+        return link.getPasswordHash() != null;
+    }
+
+    public void verifyPassword(@NonNull ShareLink link, String password) {
+        if (link.getPasswordHash() == null) return;
+
+        if (password == null || password.isBlank() || !hashing.verifyPassword(password, link.getPasswordHash()))
+            throw new IllegalArgumentException("Invalid password");
     }
 
     @Transactional
-    public ShareDtos.ResolveShareResponse resolve(String token, ShareDtos.ResolveShareRequest req) throws Exception {
-        ShareLink link = shareRepo.findByTokenAndActiveTrue(token)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Share link not found"));
+    public String getDownloadUrl(String token, String password) {
+        ShareLink link = requireValid(token);
+        verifyPassword(link, password);
 
-        if (link.getExpiresAt() != null && link.getExpiresAt().isBefore(OffsetDateTime.now()))
-            throw new ResponseStatusException(HttpStatus.GONE, "Share link expired");
+        StorageNode node = link.getNode();
+        if (node.isTrashed()) throw new IllegalArgumentException("Shared file is no longer available");
 
-
-        if (link.getMaxDownloads() != null && link.getDownloadCount() >= link.getMaxDownloads())
-            throw new ResponseStatusException(HttpStatus.GONE, "Download limit reached");
-
-
-        if (link.getPasswordHash() != null) {
-            String pw = req == null ? null : req.password();
-
-            if (pw == null || !passwordEncoder.matches(pw, link.getPasswordHash()))
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid password");
-        }
-
-        FileMetaData node = link.getNode();
-        if (node == null || node.getS3ObjectName() == null || node.getS3ObjectName().isBlank())
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Shared item unavailable");
-
-
-        String downloadUrl = objectStorage.generatePresignedDownloadUrl(node.getS3ObjectName(), 10);
-
+        // increment before generating (best-effort)
         link.setDownloadCount(link.getDownloadCount() + 1);
-        shareRepo.save(link);
+        shareLinkRepository.save(link);
 
-        return new ShareDtos.ResolveShareResponse(
-                node.getFileName(),
-                node.isFolder() ? "FOLDER" : "FILE",
-                node.getSize(),
-                downloadUrl
-        );
+        return objectStorageService.createPresignedGetUrl(node.getObjectKey());
     }
 
-    private String randomTokenUrlSafe() {
-        byte[] b = new byte[24];
-        new SecureRandom().nextBytes(b);
+    public List<ShareLink> listMyShares(UUID ownerId) {
+        return shareLinkRepository.findAllByNodeOwnerIdOrderByCreatedAtDesc(ownerId);
+    }
 
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+    @Transactional
+    public void revoke(UUID ownerId, UUID shareId) {
+        ShareLink link = shareLinkRepository.findById(shareId)
+                .orElseThrow(() -> new IllegalArgumentException("Share not found"));
+
+        if (!link.getNode().getOwnerId().equals(ownerId)) throw new IllegalArgumentException("Not allowed");
+        link.setActive(false);
+
+        shareLinkRepository.save(link);
+    }
+
+    @Transactional
+    public int purgeExpired() {
+        List<ShareLink> expired = shareLinkRepository.findExpired(OffsetDateTime.now());
+
+        expired.forEach(l -> l.setActive(false));
+        shareLinkRepository.saveAll(expired);
+
+        return expired.size();
+    }
+
+    private String generateToken() {
+        byte[] bytes = new byte[24];
+        RNG.nextBytes(bytes);
+
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 }

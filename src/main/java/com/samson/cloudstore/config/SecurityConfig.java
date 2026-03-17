@@ -1,6 +1,5 @@
 package com.samson.cloudstore.config;
 
-
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import org.springframework.context.annotation.Bean;
@@ -34,25 +33,25 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(@NonNull HttpSecurity httpSecurity) {
-        httpSecurity.csrf(AbstractHttpConfigurer::disable)
-            .cors(Customizer.withDefaults())
-            .authorizeHttpRequests(
-                auth -> auth
-                    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                    .requestMatchers("/actuator/**", "/healthz").permitAll()
-                    .requestMatchers("/auth/login", "/auth/refresh").permitAll()
-                    // user registration (if public)
-                    .requestMatchers("/api/users/create").permitAll()
-                    // public share resolve/download endpoints
-                    .requestMatchers("/api/v1/shares/public/**", "/api/v1/shares/resolve/**", "/public/**").permitAll()
-                    .anyRequest().authenticated()
-            )
-            .sessionManagement(AbstractHttpConfigurer::disable)
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-            .httpBasic(Customizer.withDefaults());
-
-        return httpSecurity.build();
+        return httpSecurity
+                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(
+                    auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/actuator/**", "/healthz").permitAll()
+                        .requestMatchers("/auth/login", "/auth/refresh").permitAll()
+                        // user registration (if public)
+                        .requestMatchers("/api/users/create").permitAll()
+                        // public share resolve/download endpoints
+                        .requestMatchers("/api/v1/shares/public/**", "/api/v1/shares/resolve/**", "/public/**").permitAll()
+                        .anyRequest().authenticated()
+                )
+                .cors(Customizer.withDefaults())
+                .sessionManagement(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                //.httpBasic(Customizer.withDefaults())
+                .build();
     }
 
     @Bean

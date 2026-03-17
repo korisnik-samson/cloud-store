@@ -5,11 +5,13 @@ import com.samson.cloudstore.dto.UserResponse;
 import com.samson.cloudstore.models.Users;
 import com.samson.cloudstore.repositories.UserRepository;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.UUID;
 
@@ -18,6 +20,7 @@ public class UserService {
     private final UserRepository repository;
     private final PasswordEncoder encoder;
 
+    @Autowired
     public UserService(UserRepository repository, PasswordEncoder encoder) {
         this.repository = repository;
         this.encoder = encoder;
@@ -70,7 +73,30 @@ public class UserService {
     }
 
     public UUID getAuthenticatedUserId() {
-        // TODO: Implement this
-        return UUID.randomUUID();
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth == null || auth.getName() == null || auth.getName().isBlank())
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "Unauthorized"
+            );
+
+        try {
+            return UUID.fromString(auth.getName());
+
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "Invalid auth subject"
+            );
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Users getAuthenticatedUser() {
+        UUID userId = getAuthenticatedUserId();
+
+        if (userId == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized user");
+
+        return repository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized user"));
     }
 }
