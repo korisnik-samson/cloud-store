@@ -40,10 +40,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/actuator/**", "/healthz").permitAll()
                         .requestMatchers("/auth/login", "/auth/refresh").permitAll()
+
                         // user registration (if public)
                         .requestMatchers("/api/users/create").permitAll()
+
                         // public share resolve/download endpoints
                         .requestMatchers("/api/v1/shares/public/**", "/api/v1/shares/resolve/**", "/public/**").permitAll()
+
                         .anyRequest().authenticated()
                 )
                 .cors(Customizer.withDefaults())

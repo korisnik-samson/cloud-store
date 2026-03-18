@@ -19,4 +19,6 @@ public class StorageProperties {
     private Integer trashRetentionDays = 30;
 
     private Long multipartPartSizeBytes = 8L * 1024 * 1024;
+
+    private Long userQuotaBytes = 107374182400L;
 }
