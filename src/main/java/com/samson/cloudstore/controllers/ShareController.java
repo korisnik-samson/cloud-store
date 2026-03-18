@@ -60,6 +60,7 @@ public class ShareController {
 
         List<Map<String, Object>> response = shares.stream().map(s -> {
             StorageNode n = s.getNode();
+
             return Map.<String, Object>of(
                     "id", s.getId(),
                     "token", s.getToken(),
@@ -101,6 +102,7 @@ public class ShareController {
 
         if (link.getPasswordHash() != null) {
             String pwd = req == null ? null : req.getPassword();
+
             try {
                 // this will throw if invalid
                 shareService.verifyPassword(link, pwd);
