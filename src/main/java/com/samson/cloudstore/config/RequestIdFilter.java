@@ -24,6 +24,7 @@ public class RequestIdFilter implements Filter {
 
         String rid = Optional.ofNullable(req.getHeader(HDR)).orElse(UUID.randomUUID().toString());
         MDC.put("requestId", rid);
+
         res.setHeader(HDR, rid);
 
         try { chain.doFilter(request, response); }
