@@ -17,8 +17,7 @@ public class StorageUsageService {
     private final StorageNodeRepository storageNodeRepository;
     private final StorageProperties storageProperties;
 
-    public StorageUsageService(StorageNodeRepository storageNodeRepository,
-                               StorageProperties storageProperties) {
+    public StorageUsageService(StorageNodeRepository storageNodeRepository, StorageProperties storageProperties) {
         this.storageNodeRepository = storageNodeRepository;
         this.storageProperties = storageProperties;
     }
