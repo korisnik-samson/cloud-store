@@ -1,7 +1,7 @@
 -- Core schema for CloudStore
 
 -- Useful for gen_random_uuid() if you decide to default UUIDs at DB level.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- =========================
 -- Users & Auth

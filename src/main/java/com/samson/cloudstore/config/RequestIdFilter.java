@@ -22,10 +22,10 @@ public class RequestIdFilter implements Filter {
         HttpServletRequest req = (HttpServletRequest) request;
         HttpServletResponse res = (HttpServletResponse) response;
 
-        String rid = Optional.ofNullable(req.getHeader(HDR)).orElse(UUID.randomUUID().toString());
-        MDC.put("requestId", rid);
+        String requestId = Optional.ofNullable(req.getHeader(HDR)).orElse(UUID.randomUUID().toString());
+        MDC.put("requestId", requestId);
 
-        res.setHeader(HDR, rid);
+        res.setHeader(HDR, requestId);
 
         try { chain.doFilter(request, response); }
         finally { MDC.remove("requestId"); }

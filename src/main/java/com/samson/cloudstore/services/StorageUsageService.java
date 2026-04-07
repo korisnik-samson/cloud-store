@@ -5,6 +5,7 @@ import com.samson.cloudstore.models.Users;
 import com.samson.cloudstore.repositories.StorageNodeRepository;
 import com.samson.cloudstore.config.StorageProperties;
 import org.jspecify.annotations.NonNull;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -17,6 +18,7 @@ public class StorageUsageService {
     private final StorageNodeRepository storageNodeRepository;
     private final StorageProperties storageProperties;
 
+    @Autowired
     public StorageUsageService(StorageNodeRepository storageNodeRepository, StorageProperties storageProperties) {
         this.storageNodeRepository = storageNodeRepository;
         this.storageProperties = storageProperties;

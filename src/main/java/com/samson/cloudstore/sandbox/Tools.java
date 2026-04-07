@@ -1,12 +1,8 @@
-package com.samson.cloudstore.utilities;
-
-import org.jspecify.annotations.NonNull;
+package com.samson.cloudstore.sandbox;
 
 import java.time.LocalDate;
 
 public class Tools {
-
-    public enum Gender { MALE, FEMALE }
 
     /**
      * Verifies a JMBG number against the provided personal details.
@@ -48,12 +44,17 @@ public class Tools {
 
         for (int i = 0; i < 13; i++) d[i] = Character.getNumericValue(jmbg.charAt(i));
 
-        int sum = 7 * (d[0] + d[6])
+        /*int tempSum = 7 * (d[0] + d[6])
                 + 6 * (d[1] + d[7])
                 + 5 * (d[2] + d[8])
                 + 4 * (d[3] + d[9])
                 + 3 * (d[4] + d[10])
-                + 2 * (d[5] + d[11]);
+                + 2 * (d[5] + d[11]);*/
+
+        int sum = 0;
+
+        // formula simplified to use a loop
+        for (int i = 0; i < 6; i++) sum += (7 - i) * (d[i] + d[i + 6]);
 
         int remainder = sum % 11;
         int expectedChecksum = 11 - remainder;
@@ -64,41 +65,10 @@ public class Tools {
         return expectedChecksum == actualChecksum;
     }
 
-    static void main(String[] args) {
-        String day;
-        String month;
-        String year;
+    static void main() {
+        Collector collector = new Collector().collect();
 
-        System.out.println("Enter date of birth (DD MM YYYY):");
-
-        try (java.util.Scanner scanner = new java.util.Scanner(System.in)) {
-            System.out.print("Day: ");
-            day = scanner.next();
-
-            System.out.print("Month: ");
-            month = scanner.next();
-
-            System.out.print("Year: ");
-            year = scanner.next();
-
-            LocalDate dateOfBirth = LocalDate.of(Integer.parseInt(year), Integer.parseInt(month), Integer.parseInt(day));
-            System.out.println("Date of Birth: " + dateOfBirth);
-
-            System.out.println("Enter gender (M/F):");
-            String gender = scanner.next();
-            Gender genderEnum = gender.equalsIgnoreCase("M") ? Gender.MALE : Gender.FEMALE;
-
-            System.out.println("Gender: " + genderEnum);
-
-            System.out.println("Enter JMBG number:");
-            String jmbg = scanner.next();
-            System.out.println("JMBG: " + jmbg);
-
-            boolean isValid = verifyJmbg(jmbg, dateOfBirth, genderEnum);
-            System.out.println("JMBG is valid: " + isValid);
-
-        } catch (Exception e) {
-            System.out.println("Error: " + e.getMessage());
-        }
+        boolean isValid = verifyJmbg(collector.jmbg, collector.dateOfBirth, collector.gender);
+        System.out.println("JMBG is valid: " + isValid);
     }
 }
