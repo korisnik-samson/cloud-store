@@ -12,7 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest(properties = {
         // "app.minio.enabled=true",
-        "app.minio.endpoint=http://192.168.50.17:9000",
+        "app.minio.endpoint=https://s3-cloudstore.duckdns.org",
         "app.minio.access-key=cloudadmin",
         "app.minio.secret-key=hbwv6273"
 })
