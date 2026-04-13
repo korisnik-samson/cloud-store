@@ -1,5 +1,7 @@
 package com.samson.cloudstore.services;
 
+import com.samson.cloudstore.config.RabbitMQConfig;
+import com.samson.cloudstore.dto.FileUploadedMessage;
 import com.samson.cloudstore.models.FileVersion;
 import com.samson.cloudstore.models.StorageNode;
 import com.samson.cloudstore.models.Users;
@@ -8,6 +10,10 @@ import com.samson.cloudstore.repositories.StorageNodeRepository;
 import com.samson.cloudstore.utilities.NodeType;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,11 +28,13 @@ public class StorageNodeService {
     private final FileVersionRepository fileVersionRepository;
     private final ObjectStorageService objectStorageService;
     private final AuditService auditService;
+    private final RabbitTemplate rabbitTemplate;
 
     // ------------------
     // Listing
     // ------------------
 
+    @Cacheable(value = "nodes", key = "'children:' + #ownerId + ':' + (#parentId ?: 'root')")
     public List<StorageNode> listChildren(UUID ownerId, UUID parentId) {
         if (parentId == null) return storageNodeRepository.findByOwnerIdAndParentIsNullAndTrashedFalseOrderByTypeAscNameAsc(ownerId);
 
@@ -35,9 +43,11 @@ public class StorageNodeService {
 
     public List<StorageNode> search(UUID ownerId, String query) {
         if (query == null || query.isBlank()) return List.of();
+
         return storageNodeRepository.search(ownerId, query.trim());
     }
 
+    @Cacheable(value = "nodes", key = "'trash:' + #ownerId")
     public List<StorageNode> listTrashRoots(UUID ownerId) {
         return storageNodeRepository.findTrashRoots(ownerId);
     }
@@ -47,6 +57,7 @@ public class StorageNodeService {
     // ------------------
 
     @Transactional
+    @CacheEvict(value = "nodes", key = "'children:' + #ownerId + ':' + (#parentId ?: 'root')")
     public StorageNode createFolder(UUID ownerId, UUID parentId, String name) {
         Objects.requireNonNull(ownerId, "ownerId");
 
@@ -56,6 +67,7 @@ public class StorageNodeService {
         ensureNoNameConflict(ownerId, parentId, name);
 
         OffsetDateTime now = OffsetDateTime.now();
+
         StorageNode node = StorageNode.builder()
                 .ownerId(ownerId)
                 .parent(parent)
@@ -87,6 +99,7 @@ public class StorageNodeService {
      * If a file with the same name exists in the same folder, we create a new version.
      */
     @Transactional
+    @CacheEvict(value = "nodes", key = "'children:' + #ownerId + ':' + (#parentId ?: 'root')")
     public StorageNode saveUploadedFileMetadata(UUID ownerId,
                                                 UUID parentId,
                                                 String fileName,
@@ -155,7 +168,26 @@ public class StorageNodeService {
         StorageNode saved = storageNodeRepository.save(node);
         auditService.log(ownerId, "NODE_UPLOAD_CREATE", saved.getId(), null);
 
+        publishUploadEvent(saved);
+
         return saved;
+    }
+
+    private void publishUploadEvent(StorageNode node) {
+        FileUploadedMessage message = new FileUploadedMessage(
+                node.getId(),
+                node.getOwnerId(),
+                node.getName(),
+                node.getMimeType(),
+                node.getObjectKey(),
+                node.getSizeBytes() != null ? node.getSizeBytes() : 0L
+        );
+
+        String routingKey = node.getMimeType() != null && node.getMimeType().startsWith("image/")
+                ? "file.uploaded.image"
+                : "file.uploaded.other";
+
+        rabbitTemplate.convertAndSend(RabbitMQConfig.CLOUDSTORE_EXCHANGE, routingKey, message);
     }
 
     public List<FileVersion> listVersions(UUID ownerId, UUID nodeId) {
@@ -186,6 +218,10 @@ public class StorageNodeService {
     // ------------------
 
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "nodes", key = "'children:' + #ownerId + ':' + (#node.parent != null ? #node.parent.id : 'root')", beforeInvocation = true),
+        @CacheEvict(value = "nodes", key = "'trash:' + #ownerId", beforeInvocation = true)
+    })
     public void trash(UUID ownerId, UUID nodeId) {
         StorageNode node = storageNodeRepository.findByIdAndOwnerId(nodeId, ownerId)
                 .orElseThrow(() -> new IllegalArgumentException("Node not found"));
@@ -198,6 +234,10 @@ public class StorageNodeService {
     }
 
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "nodes", key = "'children:' + #ownerId + ':root'", beforeInvocation = true),
+        @CacheEvict(value = "nodes", key = "'trash:' + #ownerId", beforeInvocation = true)
+    })
     public void restore(UUID ownerId, UUID nodeId) {
         StorageNode node = storageNodeRepository.findByIdAndOwnerId(nodeId, ownerId)
                 .orElseThrow(() -> new IllegalArgumentException("Node not found"));
@@ -218,6 +258,7 @@ public class StorageNodeService {
 
     // Permanently delete a trashed node and its subtree
     @Transactional
+    @CacheEvict(value = "nodes", key = "'trash:' + #ownerId")
     public void purge(UUID ownerId, UUID nodeId) {
         StorageNode node = storageNodeRepository.findByIdAndOwnerId(nodeId, ownerId)
                 .orElseThrow(() -> new IllegalArgumentException("Node not found"));
@@ -264,6 +305,7 @@ public class StorageNodeService {
     // ------------------
 
     @Transactional
+    @CacheEvict(value = "nodes", key = "'children:' + #ownerId + ':' + (#node.parent != null ? #node.parent.id : 'root')")
     public StorageNode rename(UUID ownerId, UUID nodeId, String newName) {
         if (newName == null || newName.isBlank()) throw new IllegalArgumentException("Name required");
 
@@ -288,6 +330,10 @@ public class StorageNodeService {
     }
 
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "nodes", key = "'children:' + #ownerId + ':' + (#node.parent != null ? #node.parent.id : 'root')"),
+        @CacheEvict(value = "nodes", key = "'children:' + #ownerId + ':' + (#newParentId ?: 'root')")
+    })
     public StorageNode move(UUID ownerId, UUID nodeId, UUID newParentId) {
         StorageNode node = storageNodeRepository.findByIdAndOwnerId(nodeId, ownerId)
                 .orElseThrow(() -> new IllegalArgumentException("Node not found"));

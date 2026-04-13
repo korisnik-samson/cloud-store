@@ -29,6 +29,7 @@ public class StorageUsageService {
         long usedBytes = storageNodeRepository.sumTotalUsage(user.getUserId());
 
         Map<String, Long> byCategory = new HashMap<>();
+
         // defaults
         byCategory.put("images", 0L);
         byCategory.put("videos", 0L);

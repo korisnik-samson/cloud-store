@@ -1,8 +1,11 @@
 package com.samson.cloudstore.services;
 
+import com.samson.cloudstore.config.RabbitMQConfig;
+import com.samson.cloudstore.dto.AuditEventMessage;
 import com.samson.cloudstore.models.AuditEvent;
 import com.samson.cloudstore.repositories.AuditEventRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -14,17 +17,22 @@ import java.util.UUID;
 public class AuditService {
 
     private final AuditEventRepository auditEventRepository;
+    private final RabbitTemplate rabbitTemplate;
 
     public void log(UUID userId, String action, UUID nodeId, String metadataJson) {
-        AuditEvent auditEvent = AuditEvent.builder()
-                .userId(userId)
-                .action(action)
-                .nodeId(nodeId)
-                .metadata(metadataJson)
-                .createdAt(OffsetDateTime.now())
-                .build();
+        AuditEventMessage message = new AuditEventMessage(
+                userId,
+                action,
+                nodeId,
+                metadataJson,
+                OffsetDateTime.now()
+        );
 
-        auditEventRepository.save(auditEvent);
+        rabbitTemplate.convertAndSend(
+                RabbitMQConfig.CLOUDSTORE_EXCHANGE,
+                RabbitMQConfig.AUDIT_ROUTING_KEY,
+                message
+        );
     }
 
     public List<AuditEvent> latestForUser(UUID userId) {

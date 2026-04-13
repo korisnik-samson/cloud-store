@@ -1,5 +1,7 @@
 package com.samson.cloudstore.services;
 
+import com.samson.cloudstore.config.RabbitMQConfig;
+import com.samson.cloudstore.dto.FileUploadedMessage;
 import com.samson.cloudstore.dto.NodeDtos;
 import com.samson.cloudstore.dto.UploadDtos;
 import com.samson.cloudstore.models.FileMetaData;
@@ -7,6 +9,7 @@ import com.samson.cloudstore.models.Users;
 import com.samson.cloudstore.repositories.FileMetaDataRepository;
 import io.minio.StatObjectResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,6 +25,7 @@ public class UploadService {
     private final ObjectStorageService objectStorage;
     private final FileMetaDataRepository fileRepo;
     private final NodeService nodeService;
+    private final RabbitTemplate rabbitTemplate;
 
     @Value("${app.storage.max-file-size-bytes:10737418240}") // 10GB
     private long maxFileSizeBytes;
@@ -71,6 +75,27 @@ public class UploadService {
                 .build();
 
         FileMetaData saved = fileRepo.save(node);
+
+        // Publish event
+        publishUploadEvent(saved);
+
         return NodeService.toDto(saved);
+    }
+
+    private void publishUploadEvent(FileMetaData node) {
+        FileUploadedMessage message = new FileUploadedMessage(
+                node.getId(),
+                node.getOwner().getUserId(),
+                node.getFileName(),
+                node.getContentType(),
+                node.getS3ObjectName(),
+                node.getSize()
+        );
+
+        String routingKey = node.getContentType() != null && node.getContentType().startsWith("image/")
+                ? "file.uploaded.image"
+                : "file.uploaded.other";
+
+        rabbitTemplate.convertAndSend(RabbitMQConfig.CLOUDSTORE_EXCHANGE, routingKey, message);
     }
 }

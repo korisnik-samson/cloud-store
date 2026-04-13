@@ -6,6 +6,8 @@ import com.samson.cloudstore.models.Users;
 import com.samson.cloudstore.repositories.UserRepository;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "users", key = "#id")
     public UserResponse get(UUID id) {
         Users u = repository.findById(id).orElseThrow(
                 () -> new ResponseStatusException(HttpStatus.NOT_FOUND)
@@ -36,6 +39,7 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "allUsers")
     public Iterable<UserResponse> getAllUsers() {
         return repository.findAll().stream().map(
                 users -> new UserResponse(
@@ -46,6 +50,7 @@ public class UserService {
     }
 
     @Transactional
+    @CacheEvict(value = "allUsers", allEntries = true)
     public UserResponse create(@NotNull CreateUserRequest request) {
         // perform any conflict checks
         if (repository.existsByEmail(request.email())) throw new ResponseStatusException(HttpStatus.CONFLICT, "email already exists");
