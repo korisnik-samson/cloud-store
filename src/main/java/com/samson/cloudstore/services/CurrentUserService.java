@@ -23,16 +23,18 @@ public class CurrentUserService {
         if (auth == null || auth.getName() == null || auth.getName().isBlank())
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized");
 
+        // auth.getName() will be the subject (sub claim) in OAuth2 JWTs
+        String subject = auth.getName();
         UUID userId;
 
         try {
-            userId = UUID.fromString(auth.getName());
+            userId = UUID.fromString(subject);
 
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid auth subject");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid auth subject: " + subject);
         }
 
         return userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized user"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized user: " + userId));
     }
 }

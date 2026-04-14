@@ -32,7 +32,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(@NonNull HttpSecurity httpSecurity) {
+    SecurityFilterChain securityFilterChain(@NonNull HttpSecurity httpSecurity) throws Exception {
         return httpSecurity
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(
@@ -50,10 +50,10 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .cors(Customizer.withDefaults())
-                .sessionManagement(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+                // Keep the custom filter for backwards compatibility or specialized logic if needed
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                //.httpBasic(Customizer.withDefaults())
                 .build();
     }
 
@@ -66,7 +66,7 @@ public class SecurityConfig {
                 "http://localhost:3000",
 
                 // TODO: replace with actual frontend URL in production
-                "https://app.deployed.com"
+                "https://cloudstore.duckdns.org"
         ));
 
         corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE" /*"OPTIONS"*/));

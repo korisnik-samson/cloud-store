@@ -5,10 +5,13 @@ import com.samson.cloudstore.dto.FileUploadedMessage;
 import com.samson.cloudstore.models.FileVersion;
 import com.samson.cloudstore.models.StorageNode;
 import com.samson.cloudstore.models.Users;
+import com.samson.cloudstore.models.elasticsearch.StorageNodeDocument;
 import com.samson.cloudstore.repositories.FileVersionRepository;
 import com.samson.cloudstore.repositories.StorageNodeRepository;
+import com.samson.cloudstore.repositories.elasticsearch.StorageNodeSearchRepository;
 import com.samson.cloudstore.utilities.NodeType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.cache.annotation.CacheEvict;
@@ -20,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.util.*;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StorageNodeService {
@@ -29,6 +33,7 @@ public class StorageNodeService {
     private final ObjectStorageService objectStorageService;
     private final AuditService auditService;
     private final RabbitTemplate rabbitTemplate;
+    private final StorageNodeSearchRepository searchRepository;
 
     // ------------------
     // Listing
@@ -44,7 +49,13 @@ public class StorageNodeService {
     public List<StorageNode> search(UUID ownerId, String query) {
         if (query == null || query.isBlank()) return List.of();
 
-        return storageNodeRepository.search(ownerId, query.trim());
+        // Use Elasticsearch for search
+        List<StorageNodeDocument> docs = searchRepository.findByNameAndOwnerIdAndTrashedFalse(query.trim(), ownerId);
+
+        // Convert documents back to entities (best-effort from DB to get full metadata if needed, or just map from docs)
+        // For simplicity, let's just return what we have in the index or fetch from DB by IDs
+        List<UUID> ids = docs.stream().map(d -> UUID.fromString(d.getId())).toList();
+        return storageNodeRepository.findAllById(ids);
     }
 
     @Cacheable(value = "nodes", key = "'trash:' + #ownerId")
@@ -82,6 +93,9 @@ public class StorageNodeService {
 
         StorageNode saved = storageNodeRepository.save(node);
         auditService.log(ownerId, "NODE_CREATE_FOLDER", saved.getId(), json("name", name));
+
+        // Index in Elasticsearch
+        indexNode(saved);
 
         return saved;
     }
@@ -145,6 +159,10 @@ public class StorageNodeService {
             StorageNode saved = storageNodeRepository.save(existing);
 
             auditService.log(ownerId, "NODE_UPLOAD_VERSION", saved.getId(), json("version", String.valueOf(nextVersion)));
+            
+            // Update index
+            indexNode(saved);
+            
             return saved;
         }
 
@@ -169,11 +187,30 @@ public class StorageNodeService {
         auditService.log(ownerId, "NODE_UPLOAD_CREATE", saved.getId(), null);
 
         publishUploadEvent(saved);
+        
+        // Index in Elasticsearch
+        indexNode(saved);
 
         return saved;
     }
 
-    private void publishUploadEvent(StorageNode node) {
+    private void indexNode(StorageNode node) {
+        try {
+            StorageNodeDocument doc = StorageNodeDocument.builder()
+                    .id(node.getId().toString())
+                    .ownerId(node.getOwnerId())
+                    .name(node.getName())
+                    .type(node.getType().name())
+                    .mimeType(node.getMimeType())
+                    .trashed(node.isTrashed())
+                    .build();
+            searchRepository.save(doc);
+        } catch (Exception e) {
+            log.error("Failed to index node {} in Elasticsearch", node.getId(), e);
+        }
+    }
+
+    private void publishUploadEvent(@NonNull StorageNode node) {
         FileUploadedMessage message = new FileUploadedMessage(
                 node.getId(),
                 node.getOwnerId(),
@@ -231,6 +268,10 @@ public class StorageNodeService {
         OffsetDateTime now = OffsetDateTime.now();
         markSubtreeTrashed(node, now);
         auditService.log(ownerId, "NODE_TRASH", nodeId, null);
+
+        // Update search index: either mark as trashed or remove
+        // For our findByName...AndTrashedFalse, marking as trashed is enough if we re-index the subtree
+        updateSubtreeInIndex(node);
     }
 
     @Transactional
@@ -254,6 +295,9 @@ public class StorageNodeService {
         untrashSubtree(node);
         updatePathsRecursively(node);
         auditService.log(ownerId, "NODE_RESTORE", nodeId, null);
+
+        // Update search index
+        updateSubtreeInIndex(node);
     }
 
     // Permanently delete a trashed node and its subtree
@@ -276,6 +320,8 @@ public class StorageNodeService {
                 } catch (Exception ignored) {
                 }
             }
+            // Remove from search index
+            removeFromIndex(n.getId());
         }
 
         // Delete version objects too
@@ -326,6 +372,9 @@ public class StorageNodeService {
 
         auditService.log(ownerId, "NODE_RENAME", nodeId, json("name", newName));
 
+        // Update search index
+        indexNode(saved);
+
         return saved;
     }
 
@@ -364,7 +413,25 @@ public class StorageNodeService {
 
         auditService.log(ownerId, "NODE_MOVE", nodeId, json("newParentId", String.valueOf(newParentId)));
 
+        // Update search index
+        indexNode(saved);
+
         return saved;
+    }
+
+    private void removeFromIndex(UUID nodeId) {
+        try {
+            searchRepository.deleteById(nodeId.toString());
+        } catch (Exception e) {
+            log.error("Failed to remove node {} from Elasticsearch", nodeId, e);
+        }
+    }
+
+    private void updateSubtreeInIndex(StorageNode root) {
+        List<StorageNode> subtree = collectSubtree(root);
+        for (StorageNode n : subtree) {
+            indexNode(n);
+        }
     }
 
     // ------------------
@@ -443,11 +510,8 @@ public class StorageNodeService {
         root.setUpdatedAt(now);
         storageNodeRepository.save(root);
 
-        for (StorageNode child : childrenOf(root)) {
-            if (child.isTrashed()) {
-                untrashSubtree(child);
-            }
-        }
+        for (StorageNode child : childrenOf(root))
+            if (child.isTrashed()) untrashSubtree(child);
     }
 
     private @NonNull List<StorageNode> childrenOf(@NonNull StorageNode parent) {
@@ -469,6 +533,7 @@ public class StorageNodeService {
         for (StorageNode child : childrenOf(root)) {
             child.setPath(buildPath(root, child.getName()));
             child.setUpdatedAt(OffsetDateTime.now());
+
             storageNodeRepository.save(child);
             updatePathsRecursively(child);
         }
@@ -492,11 +557,11 @@ public class StorageNodeService {
 
     private int depth(@NonNull StorageNode node) {
         int d = 0;
-        StorageNode p = node.getParent();
+        StorageNode tempNode = node.getParent();
 
-        while (p != null) {
+        while (tempNode != null) {
             d++;
-            p = p.getParent();
+            tempNode = tempNode.getParent();
         }
 
         return d;
