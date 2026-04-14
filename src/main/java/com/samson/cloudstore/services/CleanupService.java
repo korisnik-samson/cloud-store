@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
@@ -28,6 +29,7 @@ public class CleanupService {
 
     // Every day at 03:30
     @Scheduled(cron = "0 30 3 * * *")
+    @Transactional
     public void dailyCleanup() {
         purgeExpiredShares();
         purgeExpiredRefreshTokens();
@@ -37,6 +39,7 @@ public class CleanupService {
 
     // Also run every 30 minutes for faster feedback in dev
     @Scheduled(fixedDelay = 30 * 60 * 1000L)
+    @Transactional
     public void frequentDevCleanup() {
         purgeExpiredRefreshTokens();
         purgeOldIdempotencyKeys();

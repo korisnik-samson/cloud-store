@@ -30,6 +30,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(@NotNull HttpServletRequest request,
                                     @NotNull HttpServletResponse response, @NotNull FilterChain filterChain) throws ServletException, IOException {
+        
+        // Skip if already authenticated (e.g. by OAuth2 Resource Server)
+        if (SecurityContextHolder.getContext().getAuthentication() != null && SecurityContextHolder.getContext().getAuthentication().isAuthenticated()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         try {
             String authentication = request.getHeader("Authorization");
 
