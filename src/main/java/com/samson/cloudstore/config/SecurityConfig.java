@@ -26,9 +26,11 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
+    private final AppCorsProperties corsProperties;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, AppCorsProperties corsProperties) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.corsProperties = corsProperties;
     }
 
     @Bean
@@ -52,7 +54,7 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-                // Keep the custom filter for backwards compatibility or specialized logic if needed
+                // Keep the custom filter for backwards compatibility
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
@@ -61,17 +63,20 @@ public class SecurityConfig {
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration corsConfig = new CorsConfiguration();
 
-        corsConfig.setAllowedOrigins(List.of(
-                // TODO: replace with a dynamic url in development
-                "http://localhost:3000",
+        List<String> allowedOrigins = corsProperties.getAllowedOrigins();
+        
+        if (allowedOrigins == null || allowedOrigins.isEmpty()) corsConfig.setAllowedOrigins(List.of("*"));
+        else corsConfig.setAllowedOrigins(allowedOrigins);
 
-                // TODO: replace with actual frontend URL in production
-                "https://cloudstore.duckdns.org"
-        ));
+        List<String> allowedMethods = corsProperties.getAllowedMethods();
+        if (allowedMethods == null || allowedMethods.isEmpty()) {
+            corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        } else {
+            corsConfig.setAllowedMethods(allowedMethods);
+        }
 
-        corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE" /*"OPTIONS"*/));
         corsConfig.setAllowedHeaders(List.of("*"));
-        corsConfig.setExposedHeaders(List.of("Content-Disposition"));
+        corsConfig.setExposedHeaders(List.of("Content-Disposition", "Authorization"));
 
         corsConfig.setAllowCredentials(true);
 
