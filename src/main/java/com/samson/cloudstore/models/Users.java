@@ -49,11 +49,11 @@ public class Users {
 
     @CreationTimestamp
     @Column(name="created_at", nullable=false, updatable=false)
-    private OffsetDateTime created_at;
+    private OffsetDateTime createdAt;
 
     @UpdateTimestamp
     @Column(name="updated_at", nullable=false)
-    private OffsetDateTime updated_at;
+    private OffsetDateTime updatedAt;
 
     @Version
     @Column(name="version", nullable=false)

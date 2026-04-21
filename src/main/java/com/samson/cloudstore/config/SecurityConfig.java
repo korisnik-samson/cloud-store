@@ -54,7 +54,8 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-                // Keep the custom filter for backwards compatibility
+                // Added before UsernamePasswordAuthenticationFilter to catch custom tokens.
+                // The filter itself now contains logic to skip if already authenticated by OAuth2.
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

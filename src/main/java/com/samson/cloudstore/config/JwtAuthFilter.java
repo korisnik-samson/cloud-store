@@ -28,8 +28,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
 
     @Override
-    protected void doFilterInternal(@NotNull HttpServletRequest request,
-                                    @NotNull HttpServletResponse response, @NotNull FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response,
+                                    @NotNull FilterChain filterChain) throws ServletException, IOException {
+        // Optimization: skip if already authenticated by another mechanism (e.g. OAuth2 Resource Server)
+        if (SecurityContextHolder.getContext().getAuthentication() != null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         try {
             String authentication = request.getHeader("Authorization");
 
@@ -40,6 +46,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     Jws<Claims> claimsJws = jwtService.parseAndValidate(token);
 
                     Claims claims = claimsJws.getPayload();
+                    
+                    // Safety check: ensure it's an access token, not a refresh token
+                    if ("refresh".equals(claims.get("typ", String.class))) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
+
                     String subject = claims.getSubject();
                     String role = Optional.ofNullable(claims.get("role")).orElse("USER").toString();
                     String username = claims.get("username", String.class);
@@ -49,23 +62,21 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     MDC.put("username", username);
 
                     var authenticationToken = new AbstractAuthenticationToken(
-                            List.of(new SimpleGrantedAuthority("ROLE_" + role))) {
+                            List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                    ) {
                         @Override
-                        public Object getCredentials() {
-                            return token;
-                        }
+                        public Object getCredentials() { return token; }
 
                         @Override
-                        public Object getPrincipal() {
-                            return subject;
-                        }
+                        public Object getPrincipal() { return subject; }
                     };
 
                     authenticationToken.setAuthenticated(true);
                     SecurityContextHolder.getContext().setAuthentication(authenticationToken);
 
                 } catch (JwtException | IllegalArgumentException | SecurityException exception) {
-                    SecurityContextHolder.clearContext();
+                    // Do NOT clear context here; let other filters (like BearerTokenAuthenticationFilter)
+                    // try to authenticate if this token is invalid. Just skip and continue the filter chain.
                 }
             }
 
