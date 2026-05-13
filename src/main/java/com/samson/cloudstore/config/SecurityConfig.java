@@ -2,6 +2,7 @@ package com.samson.cloudstore.config;
 
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -28,6 +29,7 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final AppCorsProperties corsProperties;
 
+    @Autowired
     public SecurityConfig(JwtAuthFilter jwtAuthFilter, AppCorsProperties corsProperties) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.corsProperties = corsProperties;
@@ -58,6 +60,7 @@ public class SecurityConfig {
                 // The filter itself now contains logic to skip if already authenticated by OAuth2.
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
+
     }
 
     @Bean
@@ -65,16 +68,15 @@ public class SecurityConfig {
         CorsConfiguration corsConfig = new CorsConfiguration();
 
         List<String> allowedOrigins = corsProperties.getAllowedOrigins();
-        
+
         if (allowedOrigins == null || allowedOrigins.isEmpty()) corsConfig.setAllowedOrigins(List.of("*"));
         else corsConfig.setAllowedOrigins(allowedOrigins);
 
         List<String> allowedMethods = corsProperties.getAllowedMethods();
-        if (allowedMethods == null || allowedMethods.isEmpty()) {
+
+        if (allowedMethods == null || allowedMethods.isEmpty())
             corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        } else {
-            corsConfig.setAllowedMethods(allowedMethods);
-        }
+        else corsConfig.setAllowedMethods(allowedMethods);
 
         corsConfig.setAllowedHeaders(List.of("*"));
         corsConfig.setExposedHeaders(List.of("Content-Disposition", "Authorization"));
