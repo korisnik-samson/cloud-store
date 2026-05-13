@@ -6,6 +6,7 @@ import com.samson.cloudstore.repositories.UserRepository;
 import com.samson.cloudstore.services.JwtService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
+import io.jsonwebtoken.JwtException;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.jetbrains.annotations.NotNull;
@@ -50,24 +51,28 @@ public class AuthController {
         if (refreshToken == null || refreshToken.isBlank() || jwtService.isRefreshTokenExpired(refreshToken))
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh Token is invalid or expired");
 
-        Jws<Claims> claimsJws = jwtService.parseAndValidate(refreshToken);
-        Claims claims = claimsJws.getPayload();
+        try {
+            Jws<Claims> claimsJws = jwtService.parseAndValidate(refreshToken);
+            Claims claims = claimsJws.getPayload();
 
-        if (!"refresh".equals(claims.get("typ", String.class)))
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh Token is invalid");
+            if (!"refresh".equals(claims.get("typ", String.class)))
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh Token is invalid");
 
-        if (jwtService.isRefreshTokenExpired(claims.getId()))
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh Token is expired or revoked");
+            if (jwtService.isRefreshTokenExpired(claims.getId()))
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh Token is expired or revoked");
 
-        UUID userId = UUID.fromString(claims.getSubject());
-        Users user = userRepository.findById(userId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized user"));
+            UUID userId = UUID.fromString(claims.getSubject());
+            Users user = userRepository.findById(userId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized user"));
 
-        // ROTATE: revoke old refresh token and create new one
-        jwtService.revokeRefreshToken(claims.getId());
-        String newAccessToken = jwtService.generateAccessToken(user.getUserId(), user.getUsername(), user.getUserRole().name());
-        String newRefreshToken = jwtService.generateRefreshToken(user.getUserId());
+            // ROTATE: revoke old refresh token and create new one
+            jwtService.revokeRefreshToken(claims.getId());
+            String newAccessToken = jwtService.generateAccessToken(user.getUserId(), user.getUsername(), user.getUserRole().name());
+            String newRefreshToken = jwtService.generateRefreshToken(user.getUserId());
 
-        return Map.of("access_token", newAccessToken, "refresh_token", newRefreshToken, "token_type", "Bearer");
+            return Map.of("access_token", newAccessToken, "refresh_token", newRefreshToken, "token_type", "Bearer");
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh Token is invalid or expired");
+        }
     }
 
 }

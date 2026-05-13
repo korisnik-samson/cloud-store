@@ -56,8 +56,9 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-                // Move custom filter AFTER resource server to avoid clashing
-                .addFilterAfter(jwtAuthFilter, org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
+                // Added before UsernamePasswordAuthenticationFilter to catch custom tokens.
+                // The filter itself now contains logic to skip if already authenticated by OAuth2.
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
 
     }
